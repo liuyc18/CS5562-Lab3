@@ -1,0 +1,6 @@
+SST2*model*
+*.log
+*pycache*
+submit/
+_test*
+*.pt

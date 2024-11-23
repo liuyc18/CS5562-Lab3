@@ -4,6 +4,7 @@ from transformers.generation.logits_process import LogitsProcessor, LogitsProces
 from transformers import GPT2LMHeadModel
 import random
 import numpy as np
+import sys
 
 # Watermarking scheme: modify sampling strategy
 # Generates random number for every word iteration
@@ -15,7 +16,8 @@ class MyWatermarkLogitsProcessor(LogitsProcessor):
         scores_processed = scores.clone().softmax(dim=-1)
 
         # TODO: select the word using r (currently selecting the first word in vocab)
-        next_token_id = 0
+        cumul_scores = scores_processed.cumsum(dim=-1).squeeze()
+        next_token_id = torch.searchsorted(cumul_scores, r).item()
 
         # Change score of next_token to inf, and scores of all other words to -inf
         # Forcing the model to choose next_token
@@ -56,16 +58,19 @@ class MyWatermarkedModel(GPT2LMHeadModel):
         for i in range(input_len, output_len):
             input_ids = output_ids[:, :i]
             attention_mask = torch.full(input_ids.size(), 1)
-            outputs = super().generate(input_ids=input_ids, attention_mask=attention_mask, max_new_tokens=1, return_dict_in_generate=True,output_scores=True)
+            outputs = super().generate(input_ids=input_ids, attention_mask=attention_mask, 
+                                        max_new_tokens=1, return_dict_in_generate=True,
+                                        output_scores=True)
             scores.append(outputs.scores[0])
         outputs.scores = tuple(scores)
+        outputs.sequences = output_ids
         
         return outputs
 
 def query_model(input_str, model, tokenizer, max_new_tokens):
     inputs = tokenizer(input_str, return_tensors="pt")
-    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True,
-                                output_scores=True)
+    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, 
+                             return_dict_in_generate=True, output_scores=True)
     output_str = [tokenizer.decode(x) for x in outputs.sequences][0]
     return output_str
 
@@ -75,10 +80,10 @@ def verify_str(input_str, sk, model, tokenizer, max_new_tokens):
     random.seed(sk)
     rs = [random.random() for _ in range(max_new_tokens)]
     # Generate tokens with model
-    random.seed(sk)
+    model.reset_seed()
     inputs = tokenizer(input_str, return_tensors="pt")
-    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, return_dict_in_generate=True,
-                            output_scores=True)      
+    outputs = model.generate(**inputs, max_new_tokens=max_new_tokens, 
+                             return_dict_in_generate=True, output_scores=True)      
     input_len = inputs['input_ids'].shape[-1]
     valids = []
     for i in range(max_new_tokens):
@@ -89,8 +94,8 @@ def verify_str(input_str, sk, model, tokenizer, max_new_tokens):
         scores_processed = scores.clone().flatten().softmax(dim=-1)
         r = rs[i]
         # TODO: Check if the next token is the one chosen by r
-        valid=True
-        
+        cumul_scores = scores_processed.cumsum(dim=-1).squeeze()
+        valid = next_token_id == torch.searchsorted(cumul_scores, r).item()
         valids.append(valid)
     # Check if 90% of generated tokens pass our verifier check
     if np.array(valids).mean() >= 0.9:
@@ -110,6 +115,7 @@ if __name__ == '__main__':
 
     MAX_NEW_TOKENS = 10
     SECRET_KEY = random.randrange(sys.maxsize)
+    # print(SECRET_KEY)
 
     tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
     MODEL_ORIG = GPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
@@ -125,6 +131,6 @@ if __name__ == '__main__':
     for input_str in prompts:
         print(query_model(input_str, MODEL_ORIG, tokenizer, max_new_tokens=MAX_NEW_TOKENS))
         print(query_model(input_str, model, tokenizer, max_new_tokens=MAX_NEW_TOKENS))
-        # print(verify_str(input_str, SECRET_KEY, model, tokenizer, max_new_tokens=MAX_NEW_TOKENS))
-
-
+        # print(verify_str(input_str, SECRET_KEY, model, tokenizer, 
+        #                  max_new_tokens=MAX_NEW_TOKENS))
+        verifier(SECRET_KEY, model, tokenizer, max_new_tokens=MAX_NEW_TOKENS)

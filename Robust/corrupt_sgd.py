@@ -130,7 +130,9 @@ def corrupt_train_epoch(model, tokenizer, train_text_list, train_label_list,
         labels = labels.long().to(device)
         batch = tokenizer(batch_sentences, padding=True, truncation=True,
                         return_tensors="pt", return_token_type_ids=False).to(device)
-        loss, acc_num, filtered_cnt = corrupt_train_iter(model, batch, labels, optimizer, criterion, epsilon)
+        loss, acc_num, filtered_cnt = corrupt_train_iter(model, batch, labels, 
+                                                         optimizer, criterion, 
+                                                         epsilon)
         epoch_loss += loss.item() * len(batch_sentences)
         epoch_acc_num += acc_num
         filtered_cnts += filtered_cnt
@@ -139,7 +141,8 @@ def corrupt_train_epoch(model, tokenizer, train_text_list, train_label_list,
 
 def corrupt_train(train_data_path, model, tokenizer,
                 batch_size, epochs, optimizer, criterion,
-                device, seed, save_model=True, save_path=None, save_metric='loss', epsilon=0.1):
+                device, seed, save_model=True, save_path=None, 
+                save_metric='loss', epsilon=0.1):
     logger.info('Seed: ' + str(seed))
     random.seed(seed)
     np.random.seed(seed)
@@ -155,10 +158,12 @@ def corrupt_train(train_data_path, model, tokenizer,
     for epoch in range(epochs):
         logger.info("Epoch: " + str(epoch))
         model.train(True)
-        train_loss, train_acc, filter_ratio = corrupt_train_epoch(model, tokenizer, train_text_list, train_label_list,
-                                            batch_size, optimizer, criterion, device, epsilon)
+        train_loss, train_acc, filter_ratio = \
+            corrupt_train_epoch(model, tokenizer, train_text_list, train_label_list,
+                                batch_size, optimizer, criterion, device, epsilon)
 
-        logger.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}% | Filter ratio: {filter_ratio * 100:.2f}%')
+        logger.info(f'\tTrain Loss: {train_loss:.3f} | Train Acc: {train_acc * 100:.2f}% \
+                    | Filter ratio: {filter_ratio * 100:.2f}%')
 
     if save_model:
         # os.makedirs(save_path, exist_ok=True)
@@ -193,4 +198,5 @@ if __name__ == '__main__':
 
     logger.info("="*10 + "Training model on clean dataset" + "="*10)
     corrupt_train(train_data_path, model, tokenizer,
-                  BATCH_SIZE, EPOCHS, optimizer, criterion, device, SEED, save_model, save_path, save_metric, EPSILON)
+                  BATCH_SIZE, EPOCHS, optimizer, criterion, device, SEED, 
+                  save_model, save_path, save_metric, EPSILON)

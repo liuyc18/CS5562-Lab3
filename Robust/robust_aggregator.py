@@ -1,6 +1,9 @@
 import numpy as np
 import torch
 
+
+K, BENIGN_NORM = 9, 39725 # given
+
 # Put any functions you write for Question 1 here. 
 def max_var_and_direction(covar_mat): # Q 1.1
     """
@@ -27,8 +30,8 @@ def find_outlier(grads, max_var_direction): # Q 1.2
         max_var_direction (np.ndarray): direction of maximum variance.
     Returns:
         outlier_idx (int): index of the outlier gradient.
-        abs_projected_distances (np.ndarray): projected distances of each gradient
-        from the mean gradient w.r.t. the maximum variance direction.
+        abs_projected_distances (np.ndarray): projected distances of each 
+        gradient from the mean gradient w.r.t. the maximum variance direction.
     """
     mean_grad = np.mean(grads.numpy(), axis=0)
     delta_grads = grads.numpy() - mean_grad
@@ -89,10 +92,8 @@ def main():
 
     # Question 1.4
     # detect the outliers until the maximum variance is less than the threshold
-    k, benign_spec_norm_of_covmat = 9, 39725 # given
-    threshold = k * benign_spec_norm_of_covmat
     num_outliers = 1
-    while max_var_pruned > threshold:
+    while max_var_pruned > K * BENIGN_NORM: # this loop is time-consuming
         outlier_idx, _ = find_outlier(grads, max_var_direction)
         grads, pruned_covar_mat = remove_outlier(grads, outlier_idx)
         max_var_pruned, _ = max_var_and_direction(pruned_covar_mat)
@@ -102,14 +103,24 @@ def main():
     # number of outliers detected: 555, percentage of outliers: 82.5%
 
 
+if __name__ == "__main__":
+    main()
+
+
 # For question 2, it would be helpful to define a function that returns the set 
 # of pruned gradients
 def robust_aggregator(gradients):
     # gradients.shape = (batch_size, dimension=1536)
-    # Run pruning procedure
-    pruned_gradients = gradients
-    return pruned_gradients
-
-
-if __name__ == "__main__":
-    main()
+    covar_mat = np.cov(gradients.cpu().numpy(), rowvar=False)
+    max_var, max_var_direction = max_var_and_direction(covar_mat)
+    print(f"Max variance: {max_var}")
+    # Run pruning procedure until the maximum variance is less than the
+    # threshold
+    num_outliers = 0
+    while max_var > K * BENIGN_NORM:
+        outlier_idx, _ = find_outlier(gradients, max_var_direction)
+        gradients, pruned_covar_mat = remove_outlier(gradients, outlier_idx)
+        max_var, _ = max_var_and_direction(pruned_covar_mat)
+        num_outliers += 1
+    print(f"Num of outliers: {num_outliers} / {gradients.shape[0]}")
+    return gradients

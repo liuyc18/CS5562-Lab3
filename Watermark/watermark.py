@@ -1,6 +1,7 @@
 import torch
 from transformers import AutoTokenizer
-from transformers.generation.logits_process import LogitsProcessor, LogitsProcessorList
+from transformers.generation.logits_process import LogitsProcessor, \
+    LogitsProcessorList
 from transformers import GPT2LMHeadModel
 import random
 import numpy as np
@@ -15,12 +16,13 @@ class MyWatermarkLogitsProcessor(LogitsProcessor):
         # scores_processed = probabilities of each word, summing up to 1
         scores_processed = scores.clone().softmax(dim=-1)
 
-        # TODO: select the word using r (currently selecting the first word in vocab)
+        # TODO: select the word using r (currently selecting the first word in 
+        # vocab)
         cumul_scores = scores_processed.cumsum(dim=-1).squeeze()
         next_token_id = torch.searchsorted(cumul_scores, r).item()
 
-        # Change score of next_token to inf, and scores of all other words to -inf
-        # Forcing the model to choose next_token
+        # Change score of next_token to inf, and scores of all other words to 
+        # -inf Forcing the model to choose next_token
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         next_token_mask = torch.isin(vocab_tensor, next_token_id)
         scores_processed = scores.masked_fill(next_token_mask, float("inf"))
@@ -58,9 +60,11 @@ class MyWatermarkedModel(GPT2LMHeadModel):
         for i in range(input_len, output_len):
             input_ids = output_ids[:, :i]
             attention_mask = torch.full(input_ids.size(), 1)
-            outputs = super().generate(input_ids=input_ids, attention_mask=attention_mask, 
-                                        max_new_tokens=1, return_dict_in_generate=True,
-                                        output_scores=True)
+            outputs = super().generate(
+                input_ids=input_ids, attention_mask=attention_mask, 
+                max_new_tokens=1, return_dict_in_generate=True,
+                output_scores=True
+            )
             scores.append(outputs.scores[0])
         outputs.scores = tuple(scores)
         outputs.sequences = output_ids
@@ -120,7 +124,9 @@ if __name__ == '__main__':
     tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
     MODEL_ORIG = GPT2LMHeadModel.from_pretrained("distilbert/distilgpt2")
     MODEL_ORIG.generation_config.pad_token_id = tokenizer.eos_token_id
-    model = MyWatermarkedModel.from_pretrained("distilbert/distilgpt2", sk=SECRET_KEY)
+    model = MyWatermarkedModel.from_pretrained(
+        "distilbert/distilgpt2", sk=SECRET_KEY
+    )
     model.generation_config.pad_token_id = tokenizer.eos_token_id
 
     prompts=[
@@ -129,8 +135,16 @@ if __name__ == '__main__':
     ]
 
     for input_str in prompts:
-        print(query_model(input_str, MODEL_ORIG, tokenizer, max_new_tokens=MAX_NEW_TOKENS))
-        print(query_model(input_str, model, tokenizer, max_new_tokens=MAX_NEW_TOKENS))
+        print(
+            query_model(
+                input_str, MODEL_ORIG, tokenizer, max_new_tokens=MAX_NEW_TOKENS
+            )
+        )
+        print(
+            query_model(
+                input_str, model, tokenizer, max_new_tokens=MAX_NEW_TOKENS
+            )
+        )
         # print(verify_str(input_str, SECRET_KEY, model, tokenizer, 
         #                  max_new_tokens=MAX_NEW_TOKENS))
         verifier(SECRET_KEY, model, tokenizer, max_new_tokens=MAX_NEW_TOKENS)
